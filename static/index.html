@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>CodeRefine – AI Code Review</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode:'class',
+    theme:{ extend:{ colors:{ brand:{ 500:'#6366f1',600:'#4f46e5',700:'#4338ca' } } } }
+  }
+</script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<style>
+  body { font-family: system-ui, sans-serif; }
+  textarea,pre,code { font-family: 'Courier New', monospace; }
+  ::-webkit-scrollbar{width:6px;height:6px}
+  ::-webkit-scrollbar-track{background:#111827}
+  ::-webkit-scrollbar-thumb{background:#374151;border-radius:3px}
+  .tab-btn.active { border-bottom:2px solid #6366f1; color:#a5b4fc; }
+  @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .fade-in{animation:fadeIn .3s ease-out}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .spin{animation:spin .7s linear infinite}
+  @keyframes ringFill{from{stroke-dashoffset:352}to{stroke-dashoffset:var(--t)}}
+  .ring-anim{animation:ringFill 1.4s cubic-bezier(.4,0,.2,1) forwards}
+  @keyframes barFill{from{width:0}to{width:var(--w)}}
+  .bar-anim{animation:barFill 1.2s ease-out forwards}
+  @keyframes donutFill{from{stroke-dashoffset:163}to{stroke-dashoffset:var(--d)}}
+  .donut-anim{animation:donutFill 1.4s cubic-bezier(.4,0,.2,1) forwards}
+  select option,select optgroup{background:#1f2937;color:#f3f4f6}
+</style>
+</head>
+<body class="bg-gray-950 text-gray-100 h-screen flex flex-col overflow-hidden">
+
+<!-- HEADER -->
+<header class="border-b border-gray-800 bg-gray-900/95 backdrop-blur shrink-0 z-20">
+  <div class="px-5 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center shrink-0">
+        <svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+        </svg>
+      </div>
+      <div>
+        <h1 class="text-base font-bold text-white leading-none">CodeRefine</h1>
+        <p class="text-[10px] text-gray-500 mt-0.5">Generative AI · Code Review &amp; Optimization</p>
+      </div>
+    </div>
+    <div class="hidden sm:flex gap-2 text-[11px]">
+      <span class="px-2.5 py-1 rounded-full bg-red-950 text-red-400 border border-red-900">🐛 Bugs</span>
+      <span class="px-2.5 py-1 rounded-full bg-yellow-950 text-yellow-400 border border-yellow-900">⚡ Performance</span>
+      <span class="px-2.5 py-1 rounded-full bg-orange-950 text-orange-400 border border-orange-900">🔒 Security</span>
+      <span class="px-2.5 py-1 rounded-full bg-indigo-950 text-indigo-400 border border-indigo-900">✨ Rewrite</span>
+    </div>
+  </div>
+</header>
+
+<!-- APP BODY: sidebar + main -->
+<div class="flex flex-1 overflow-hidden">
+
+<!-- ══════════ LEFT HISTORY SIDEBAR ══════════ -->
+<aside id="historySidebar" class="w-56 shrink-0 border-r border-gray-800 bg-gray-900 flex flex-col overflow-hidden">
+  <!-- Header -->
+  <div class="px-3 py-3 border-b border-gray-800 flex items-center justify-between bg-indigo-950/40">
+    <h2 class="font-bold text-sm text-white flex items-center gap-1.5">🕐 History</h2>
+    <span id="historyCount" class="text-[10px] text-indigo-300 bg-indigo-900 px-2 py-0.5 rounded-full border border-indigo-800 font-bold">0</span>
+  </div>
+  <div class="flex items-center justify-end px-3 py-1.5 border-b border-gray-800/40">
+    <button onclick="clearHistory()" class="text-[11px] text-red-500 hover:text-red-400 transition-colors">Clear all</button>
+  </div>
+  <div id="historyList" class="flex-1 overflow-y-auto p-2 space-y-1.5"></div>
+</aside>
+
+<!-- ══════════ MAIN CONTENT ══════════ -->
+<main class="flex-1 overflow-y-auto px-5 py-5 flex flex-col gap-5">
+
+  <!-- INPUT ROW -->
+  <section class="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
+
+    <!-- Controls -->
+    <div class="flex flex-col gap-3">
+      <div>
+        <div class="flex items-center justify-between mb-1.5">
+          <label class="text-[11px] font-semibold text-gray-500 uppercase tracking-widest">Language</label>
+          <span id="detectedBadge" class="hidden text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800 flex items-center gap-1">🔍 <span id="detectedName"></span></span>
+        </div>
+        <select id="language" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"></select>
+      </div>
+      <div>
+        <label class="block text-[11px] font-semibold text-gray-500 mb-1.5 uppercase tracking-widest">AI Provider</label>
+        <select id="provider" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"></select>
+      </div>
+      <button id="analyzeBtn" class="w-full py-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 shadow-lg">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+        </svg>
+        <span id="btnText">Analyze Code</span>
+        <span id="btnTimer" class="hidden text-indigo-200 text-xs font-mono"></span>
+        <svg id="btnSpin" class="w-4 h-4 spin hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+        </svg>
+      </button>
+      <button onclick="saveReport()" class="w-full py-2 rounded-xl bg-emerald-900/70 hover:bg-emerald-800 border border-emerald-800 text-emerald-300 hover:text-white font-semibold text-sm flex items-center justify-center gap-2 transition-all">
+        💾 Save Report
+      </button>
+      <div class="flex gap-2">
+        <button id="sampleBtn" class="flex-1 text-xs py-1.5 rounded-lg border border-gray-700 text-gray-500 hover:text-gray-300 hover:border-gray-500 transition-colors">Load Sample</button>
+        <button id="clearBtn"  class="flex-1 text-xs py-1.5 rounded-lg border border-gray-700 text-gray-500 hover:text-gray-300 hover:border-gray-500 transition-colors">Clear</button>
+      </div>
+    </div>
+
+    <!-- Code Input -->
+    <div class="lg:col-span-2 flex flex-col gap-1.5">
+      <div class="flex justify-between">
+        <label class="text-[11px] font-semibold text-gray-500 uppercase tracking-widest">Source Code</label>
+        <span id="lineCount" class="text-[11px] text-gray-600">0 lines</span>
+      </div>
+      <textarea id="codeInput" spellcheck="false" placeholder="// Paste your code here and click Analyze Code…"
+        class="w-full min-h-[280px] bg-gray-900 border border-gray-700 rounded-xl p-4 text-[13px] text-gray-100 placeholder-gray-700 resize-y focus:outline-none focus:ring-2 focus:ring-brand-500 leading-relaxed"></textarea>
+      <!-- Language mismatch warning -->
+      <div id="mismatchBanner" class="hidden items-center justify-between gap-3 px-4 py-3 rounded-xl border border-yellow-700 bg-yellow-950/60 text-sm">
+        <div class="flex items-center gap-2 text-yellow-300">
+          <span class="text-base">⚠️</span>
+          <span>Detected <strong id="mismatchDetected" class="text-yellow-200"></strong> but <strong id="mismatchSelected" class="text-yellow-200"></strong> is selected.</span>
+        </div>
+        <div class="flex gap-2 shrink-0">
+          <button onclick="applyDetectedLang()" class="text-xs px-3 py-1.5 rounded-lg bg-yellow-700 hover:bg-yellow-600 text-white transition-colors">Use Detected</button>
+          <button onclick="dismissMismatch()" class="text-xs px-3 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors">Keep Selected</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- RESULTS -->
+  <section id="results" class="hidden flex-col gap-6 fade-in">
+
+    <!-- Score Banner -->
+    <div class="rounded-2xl border border-gray-800 bg-gray-900 overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-800 flex items-center gap-2">
+        <span>📊</span>
+        <h2 class="font-bold text-white">Code Quality Report</h2>
+        <span id="provBadge" class="ml-auto text-[11px] px-2.5 py-1 rounded-full bg-indigo-950 text-indigo-300 border border-indigo-900"></span>
+        <button id="saveReportBtn" onclick="saveReport()" class="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-emerald-900 hover:bg-emerald-800 border border-emerald-700 text-emerald-200 hover:text-white transition-colors font-semibold">
+          💾 Save Report
+        </button>
+      </div>
+      <div class="p-6 grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+        <!-- Ring -->
+        <div class="flex flex-col items-center gap-3">
+          <div class="relative">
+            <svg width="130" height="130" viewBox="0 0 130 130">
+              <circle cx="65" cy="65" r="56" fill="none" stroke="#1f2937" stroke-width="10"/>
+              <circle id="scoreRing" cx="65" cy="65" r="56" fill="none" stroke="#6366f1" stroke-width="10"
+                stroke-linecap="round" stroke-dasharray="352" stroke-dashoffset="352"
+                transform="rotate(-90 65 65)" style="--t:352" class="ring-anim"/>
+            </svg>
+            <div class="absolute inset-0 flex flex-col items-center justify-center">
+              <span id="scoreVal" class="text-4xl font-extrabold text-white">0</span>
+              <span class="text-xs text-gray-500">/100</span>
+            </div>
+          </div>
+          <div id="gradeBox" class="hidden px-5 py-1.5 rounded-full text-lg font-extrabold border-2"></div>
+        </div>
+        <!-- Stats + Bars -->
+        <div class="md:col-span-2 flex flex-col gap-4">
+          <p id="summaryText" class="text-sm text-gray-300 border-l-2 border-indigo-700 pl-4 italic"></p>
+          <div class="grid grid-cols-3 gap-3">
+            <div class="bg-gray-800/80 rounded-xl p-4 text-center border border-gray-700/50">
+              <p id="bugCount"  class="text-3xl font-extrabold text-red-400">0</p>
+              <p class="text-xs text-gray-500 mt-1">Bugs</p>
+            </div>
+            <div class="bg-gray-800/80 rounded-xl p-4 text-center border border-gray-700/50">
+              <p id="optCount"  class="text-3xl font-extrabold text-yellow-400">0</p>
+              <p class="text-xs text-gray-500 mt-1">Optimizations</p>
+            </div>
+            <div class="bg-gray-800/80 rounded-xl p-4 text-center border border-gray-700/50">
+              <p id="secCount"  class="text-3xl font-extrabold text-orange-400">0</p>
+              <p class="text-xs text-gray-500 mt-1">Vulnerabilities</p>
+            </div>
+          </div>
+          <div class="flex flex-col gap-2">
+            <div>
+              <div class="flex justify-between text-xs text-gray-500 mb-1"><span>Bug Severity</span><span id="bugLbl">–</span></div>
+              <div class="h-2 bg-gray-800 rounded-full overflow-hidden"><div id="bugBar" class="h-full bg-red-500 rounded-full bar-anim" style="--w:0%;width:0%"></div></div>
+            </div>
+            <div>
+              <div class="flex justify-between text-xs text-gray-500 mb-1"><span>Optimization Potential</span><span id="optLbl">–</span></div>
+              <div class="h-2 bg-gray-800 rounded-full overflow-hidden"><div id="optBar" class="h-full bg-yellow-400 rounded-full bar-anim" style="--w:0%;width:0%"></div></div>
+            </div>
+            <div>
+              <div class="flex justify-between text-xs text-gray-500 mb-1"><span>Security Risk</span><span id="secLbl">–</span></div>
+              <div class="h-2 bg-gray-800 rounded-full overflow-hidden"><div id="secBar" class="h-full bg-orange-500 rounded-full bar-anim" style="--w:0%;width:0%"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Metrics Donuts -->
+    <div class="rounded-2xl border border-gray-800 bg-gray-900 p-5">
+      <div class="flex items-center gap-2 mb-4">
+        <span>📈</span>
+        <h3 class="font-bold text-white text-sm">Code Metrics</h3>
+        <span class="text-[11px] text-gray-600">AI-evaluated percentages</span>
+      </div>
+      <div id="metricsGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4"></div>
+    </div>
+
+    <!-- Issues + Improved Code -->
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
+
+      <!-- Issues Tabs -->
+      <div class="flex flex-col gap-3">
+        <div class="flex gap-1 border-b border-gray-800">
+          <button class="tab-btn active px-4 py-2.5 text-sm font-medium text-gray-400 hover:text-gray-200" data-tab="bugs">
+            🐛 Bugs <span id="bugBadge" class="ml-1 text-xs bg-red-950 text-red-400 px-1.5 py-0.5 rounded-full">0</span>
+          </button>
+          <button class="tab-btn px-4 py-2.5 text-sm font-medium text-gray-400 hover:text-gray-200" data-tab="optimizations">
+            ⚡ Opts <span id="optBadge" class="ml-1 text-xs bg-yellow-950 text-yellow-400 px-1.5 py-0.5 rounded-full">0</span>
+          </button>
+          <button class="tab-btn px-4 py-2.5 text-sm font-medium text-gray-400 hover:text-gray-200" data-tab="security">
+            🔒 Security <span id="secBadge" class="ml-1 text-xs bg-orange-950 text-orange-400 px-1.5 py-0.5 rounded-full">0</span>
+          </button>
+        </div>
+        <div id="tabContent" class="overflow-y-auto max-h-[500px] space-y-3 pr-1"></div>
+      </div>
+
+      <!-- Improved Code -->
+      <div class="flex flex-col rounded-2xl border border-indigo-900/60 bg-gray-900 overflow-hidden">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-800 bg-indigo-950/30">
+          <div class="flex items-center gap-2">
+            <span>✨</span>
+            <span class="font-bold text-white text-sm">Improved Code</span>
+            <span id="rewriteLang" class="text-[11px] px-2 py-0.5 rounded-full bg-indigo-900/60 text-indigo-300 border border-indigo-800"></span>
+          </div>
+          <button id="copyBtn" class="text-xs text-gray-400 hover:text-white px-2.5 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 transition-colors">📋 Copy</button>
+        </div>
+        <div id="rewriteBox" class="flex-1 overflow-auto max-h-[500px]">
+          <div class="flex items-center justify-center h-40 text-gray-600 text-sm">Optimized code appears here after analysis</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Empty State -->
+  <section id="emptyState" class="flex flex-col items-center justify-center py-20 gap-5 text-center">
+    <div class="w-20 h-20 rounded-2xl bg-gray-900 border border-gray-800 flex items-center justify-center">
+      <svg class="w-10 h-10 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5"/>
+      </svg>
+    </div>
+    <div>
+      <h2 class="text-xl font-bold text-gray-400 mb-1">Ready to Analyze</h2>
+      <p class="text-sm text-gray-600 max-w-md">Paste code, select language &amp; provider, then click <strong class="text-gray-400">Analyze Code</strong>.</p>
+    </div>
+  </section>
+
+</main><!-- end main content -->
+</div><!-- end flex body -->
+
+<!-- Toast -->
+<div id="toast" class="fixed bottom-5 right-5 z-50 px-4 py-3 rounded-xl text-sm font-medium shadow-xl opacity-0 pointer-events-none transition-all duration-300 flex items-center gap-2"></div>
+
+<footer class="border-t border-gray-800 bg-gray-900/40 text-center py-2.5 text-[11px] text-gray-700 shrink-0">
+  CodeRefine &nbsp;·&nbsp; Powered by Google Gemini · Groq · Hugging Face
+</footer>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

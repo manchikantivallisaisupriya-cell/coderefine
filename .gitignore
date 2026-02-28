@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+venv/
+env/
+.env.local
+
+# Secrets – keep .env out of git
+.env
+
+# Logs / temp
+*.log
+server_out.txt
+server_err.txt
+
+# OS
+.DS_Store
+Thumbs.db
