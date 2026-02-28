@@ -21,3 +21,5 @@ server_err.txt
 # OS
 .DS_Store
 Thumbs.db
+
+cloudflared.exe
