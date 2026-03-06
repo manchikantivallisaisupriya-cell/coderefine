@@ -17,4 +17,5 @@ groq>=0.9.0        # Groq (LLaMA 3 / Mixtral)
 
 # Utilities
 anyio>=4.0.0       # Async support (used by FastAPI/uvicorn internally)
+aiofiles>=23.2.1   # Required by FastAPI StaticFiles for async file serving
 

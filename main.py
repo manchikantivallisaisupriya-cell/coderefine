@@ -22,7 +22,7 @@ app = FastAPI(title="CodeRefine API")
 
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-# Mount static files — skip gracefully if directory missing (e.g. Vercel CDN handles it)
+# Mount static files — works locally and on Vercel (files are bundled with function)
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
