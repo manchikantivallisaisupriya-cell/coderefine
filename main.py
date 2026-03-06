@@ -21,7 +21,10 @@ STATIC_DIR = BASE_DIR / "static"
 app = FastAPI(title="CodeRefine API")
 
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+# Mount static files — skip gracefully if directory missing (e.g. Vercel CDN handles it)
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 class AnalyzeRequest(BaseModel):
