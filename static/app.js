@@ -1,4 +1,12 @@
 // CodeRefine – Frontend Logic
+// ─────────────────────────────────────────────────────────────────────────────
+// This file handles all frontend behaviour:
+//   - Language & provider dropdown population
+//   - Auto language detection from pasted code
+//   - Sending code to the /api/analyze backend endpoint
+//   - Rendering results: score ring, metric donuts, bug/opt/security tabs
+//   - Copy Improved Code, Save Report (HTML download), History (localStorage)
+// ─────────────────────────────────────────────────────────────────────────────
 
 // ── Language groups ──────────────────────────────────────────────────────────
 const LANG_GROUPS = [
@@ -207,6 +215,9 @@ const ANALYSIS_STAGES = [
   "Building report…",
 ];
 
+// ── setLoading ────────────────────────────────────────────────────────────────
+// Enables/disables the analyze button during API calls.
+// Shows a rotating stage message (e.g. "AI is reviewing…") and elapsed timer.
 function setLoading(on) {
   analyzeBtn.disabled = on;
   btnSpin.classList.toggle("hidden", !on);
@@ -224,7 +235,7 @@ function setLoading(on) {
     }, 1000);
   } else {
     clearInterval(_timerInterval);
-    btnText.textContent = "Analyze Code";
+    btnText.textContent = "Run AI Code Analysis";
     btnTimer.classList.add("hidden");
     btnTimer.textContent = "";
   }
@@ -298,6 +309,9 @@ function showToast(msg, type = "info") {
 }
 
 // ── Language detection engine ─────────────────────────────────────────────
+// Scores code against regex patterns for each language.
+// Called automatically 700ms after the user stops typing.
+// Auto-switches the language dropdown to the best match (score >= 3).
 const DETECT_RULES = [
   { lang: "Python",       score: c =>
       (c.match(/^\s*def\s+\w+\s*\(/m) ? 4 : 0) +
@@ -478,6 +492,9 @@ function dismissMismatch() {
 }
 
 // ── Main analysis ─────────────────────────────────────────────────────────────
+// Called when the user clicks "Run AI Code Analysis".
+// Sends the code, selected language, and provider to /api/analyze.
+// On success: renders full results. On error: shows user-friendly toast message.
 async function runAnalysis() {
   const code = codeInput.value.trim();
   if (!code) { showToast("Paste some code first", "warning"); return; }
@@ -547,6 +564,9 @@ function showMismatchError(detected, selected) {
   showToast(`Language mismatch! Detected ${detected} ≠ ${selected} selected — showing 0% score.`, "error");
 }
 // ── Save Report ─────────────────────────────────────────────────────────────────
+// Generates a self-contained HTML report file and triggers a download.
+// The report includes: score, summary, metrics bars, bug/security/opt tables,
+// and the full improved code block.
 function saveReport() {
   if (!currentData) { showToast("Run an analysis first", "warning"); return; }
   const d = currentData;
@@ -613,6 +633,13 @@ ${d.optimized_code ? `<h2>✨ Improved Code</h2><div class="optimized">${esc(d.o
   showToast("💾 Report saved!", "success");
 }
 // ── Render results ────────────────────────────────────────────────────────────
+// Populates the full analysis report:
+//   - Animated score ring & grade badge
+//   - Summary text & provider badge
+//   - Bug / Optimization / Security counts and severity bars
+//   - Metric donut charts (6 dimensions)
+//   - Bug/Opt/Security tab cards
+//   - Improved (rewritten) code panel with syntax highlighting
 function renderResults(data) {
   emptyState.classList.add("hidden");
   results.classList.remove("hidden");
@@ -796,6 +823,8 @@ function secCard(sec) {
 }
 
 // ── History ──────────────────────────────────────────────────────────────────
+// Saves the last 20 analysis results to localStorage so users can
+// restore previous analyses without re-running them.
 const HISTORY_KEY = "coderefine_history";
 const MAX_HISTORY = 20;
 
@@ -892,5 +921,6 @@ function renderHistoryPanel() {
 }
 
 // ── Start ─────────────────────────────────────────────────────────────────────
+// Entry point: restore history from localStorage and load provider metadata.
 renderHistoryPanel();
 init();
