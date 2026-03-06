@@ -58,14 +58,14 @@ def _call_gemini(code: str, language: str) -> str:
     primary = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
     models = [primary] + [m for m in _GEMINI_FALLBACKS if m != primary]
 
-    # Truncate large inputs to keep latency low (keep first 60 lines)
+    # Truncate very large inputs (keep first 150 lines)
     code_lines = code.split("\n")
-    if len(code_lines) > 60:
-        code = "\n".join(code_lines[:60]) + "\n# ... (truncated to first 60 lines for analysis)"
+    if len(code_lines) > 150:
+        code = "\n".join(code_lines[:150]) + "\n# ... (truncated to first 150 lines for analysis)"
 
     payload = {
         "contents": [{"parts": [{"text": f"{SYSTEM_PROMPT}\n\n{build_review_prompt(code, language)}"}]}],
-        "generationConfig": {"temperature": 0.1, "maxOutputTokens": 1200},
+        "generationConfig": {"temperature": 0.1, "maxOutputTokens": 2500},
     }
 
     last_err = None
@@ -108,15 +108,15 @@ def _call_groq(code: str, language: str) -> str:
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         raise ValueError("GROQ_API_KEY not set in .env")
-    # Truncate large inputs
+    # Truncate very large inputs (keep first 150 lines)
     code_lines = code.split("\n")
-    if len(code_lines) > 60:
-        code = "\n".join(code_lines[:60]) + "\n# ... (truncated)"
+    if len(code_lines) > 150:
+        code = "\n".join(code_lines[:150]) + "\n# ... (truncated)"
     client = Groq(api_key=api_key)
     completion = client.chat.completions.create(
         model=os.getenv("GROQ_MODEL", "llama-3.1-8b-instant"),
         temperature=0.1,
-        max_tokens=1200,
+        max_tokens=2500,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user",   "content": build_review_prompt(code, language)},
@@ -129,10 +129,10 @@ def _call_huggingface(code: str, language: str) -> str:
     api_key = os.getenv("HF_API_KEY")
     if not api_key:
         raise ValueError("HF_API_KEY not set in .env")
-    # Truncate large inputs
+    # Truncate very large inputs (keep first 150 lines)
     code_lines = code.split("\n")
-    if len(code_lines) > 60:
-        code = "\n".join(code_lines[:60]) + "\n# ... (truncated)"
+    if len(code_lines) > 150:
+        code = "\n".join(code_lines[:150]) + "\n# ... (truncated)"
     model_id = os.getenv("HF_MODEL", "mistralai/Mistral-7B-Instruct-v0.3")
     url = f"https://api-inference.huggingface.co/models/{model_id}/v1/chat/completions"
     payload = {
@@ -142,7 +142,7 @@ def _call_huggingface(code: str, language: str) -> str:
             {"role": "user",   "content": build_review_prompt(code, language)},
         ],
         "temperature": 0.1,
-        "max_tokens": 1200,
+        "max_tokens": 2500,
     }
     with httpx.Client(timeout=45.0) as client:
         r = client.post(url, headers={"Authorization": f"Bearer {api_key}"}, json=payload)
