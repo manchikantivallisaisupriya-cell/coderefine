@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: coderefine
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false       # You'll enter this manually in Render dashboard
+      - key: GROQ_API_KEY
+        sync: false
+      - key: HF_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-1.5-flash
+      - key: GROQ_MODEL
+        value: llama-3.1-8b-instant
+      - key: HF_MODEL
+        value: mistralai/Mistral-7B-Instruct-v0.3
