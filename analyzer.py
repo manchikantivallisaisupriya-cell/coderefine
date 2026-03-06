@@ -104,6 +104,7 @@ def _call_gemini(code: str, language: str) -> str:
 
 
 def _call_groq(code: str, language: str) -> str:
+    import time
     from groq import Groq
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
@@ -113,19 +114,35 @@ def _call_groq(code: str, language: str) -> str:
     if len(code_lines) > 150:
         code = "\n".join(code_lines[:150]) + "\n# ... (truncated)"
     client = Groq(api_key=api_key)
-    completion = client.chat.completions.create(
-        model=os.getenv("GROQ_MODEL", "llama-3.1-8b-instant"),
-        temperature=0.1,
-        max_tokens=2500,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user",   "content": build_review_prompt(code, language)},
-        ],
-    )
-    return completion.choices[0].message.content.strip()
+    # Retry up to 3 times on transient errors
+    last_err = None
+    for attempt in range(3):
+        try:
+            completion = client.chat.completions.create(
+                model=os.getenv("GROQ_MODEL", "llama-3.1-8b-instant"),
+                temperature=0.1,
+                max_tokens=2500,
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user",   "content": build_review_prompt(code, language)},
+                ],
+            )
+            return completion.choices[0].message.content.strip()
+        except Exception as e:
+            last_err = str(e)
+            if "rate_limit" in last_err.lower() or "429" in last_err:
+                wait = 10 * (attempt + 1)
+                time.sleep(wait)
+                continue
+            if attempt < 2:
+                time.sleep(3)
+                continue
+            break
+    raise ValueError(f"Groq API failed after 3 attempts: {last_err}")
 
 
 def _call_huggingface(code: str, language: str) -> str:
+    import time
     api_key = os.getenv("HF_API_KEY")
     if not api_key:
         raise ValueError("HF_API_KEY not set in .env")
@@ -144,15 +161,34 @@ def _call_huggingface(code: str, language: str) -> str:
         "temperature": 0.1,
         "max_tokens": 2500,
     }
-    with httpx.Client(timeout=45.0) as client:
-        r = client.post(url, headers={"Authorization": f"Bearer {api_key}"}, json=payload)
-    if r.status_code != 200:
-        raise ValueError(f"HuggingFace API error {r.status_code}: {r.text}")
-    data = r.json()
-    try:
-        return data["choices"][0]["message"]["content"].strip()
-    except (KeyError, IndexError) as e:
-        raise ValueError(f"Unexpected HF response: {data}") from e
+    last_err = None
+    for attempt in range(3):
+        try:
+            with httpx.Client(timeout=45.0) as client:
+                r = client.post(url, headers={"Authorization": f"Bearer {api_key}"}, json=payload)
+            if r.status_code == 200:
+                data = r.json()
+                try:
+                    return data["choices"][0]["message"]["content"].strip()
+                except (KeyError, IndexError) as e:
+                    raise ValueError(f"Unexpected HF response: {data}") from e
+            if r.status_code == 503:  # model loading
+                wait = 15 * (attempt + 1)
+                last_err = f"HF model loading, retrying in {wait}s…"
+                time.sleep(wait)
+                continue
+            if r.status_code == 429:
+                wait = 10 * (attempt + 1)
+                last_err = f"HF rate-limited, retrying in {wait}s…"
+                time.sleep(wait)
+                continue
+            last_err = f"HuggingFace API error {r.status_code}: {r.text[:200]}"
+            break
+        except httpx.TimeoutException:
+            last_err = f"HuggingFace request timed out (attempt {attempt+1})"
+            if attempt < 2:
+                time.sleep(5)
+    raise ValueError(last_err or "HuggingFace API failed.")
 
 
 def _parse_response(raw: str) -> dict:

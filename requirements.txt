@@ -8,10 +8,13 @@ python-multipart>=0.0.9
 # Environment variable loading
 python-dotenv>=1.0.1
 
-# HTTP client (used for Gemini REST API - avoids protobuf issues on Python 3.14)
+# HTTP client (used for Gemini REST API)
 httpx>=0.27.0
 
 # AI Providers
 groq>=0.9.0        # Groq (LLaMA 3 / Mixtral)
 # huggingface_hub  # Optional: only needed if using Hugging Face provider
+
+# Utilities
+anyio>=4.0.0       # Async support (used by FastAPI/uvicorn internally)
 

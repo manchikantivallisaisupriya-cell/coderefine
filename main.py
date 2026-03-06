@@ -1,12 +1,13 @@
 """CodeRefine – FastAPI backend."""
 
 import asyncio
+import os
 from functools import partial
 from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -46,6 +47,17 @@ async def frontend():
     return FileResponse(STATIC_DIR / "index.html")
 
 
+@app.get("/api/health")
+async def health():
+    """Uptime / health-check endpoint."""
+    keys = {
+        "gemini":      bool(os.getenv("GEMINI_API_KEY")),
+        "groq":        bool(os.getenv("GROQ_API_KEY")),
+        "huggingface": bool(os.getenv("HF_API_KEY")),
+    }
+    return JSONResponse({"status": "ok", "providers_configured": keys})
+
+
 @app.get("/api/meta")
 async def meta():
     return {"languages": SUPPORTED_LANGUAGES, "providers": PROVIDERS}
@@ -56,7 +68,7 @@ async def analyze(req: AnalyzeRequest):
     if req.provider.lower() not in PROVIDERS:
         raise HTTPException(400, f"Invalid provider '{req.provider}'")
     try:
-        loop   = asyncio.get_event_loop()
+        loop   = asyncio.get_running_loop()
         result = await loop.run_in_executor(
             None, partial(analyze_code, req.code, req.language, req.provider)
         )
@@ -69,4 +81,4 @@ async def analyze(req: AnalyzeRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    uvicorn.run(app, host="0.0.0.0", port=8080, log_level="info", access_log=True)
